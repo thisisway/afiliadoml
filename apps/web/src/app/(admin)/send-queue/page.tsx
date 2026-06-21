@@ -2,7 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Check, X, Send } from "lucide-react";
+import { Check, X, Send, Plus } from "lucide-react";
+import { useState } from "react";
 
 const STATUS_COLOR: Record<string, string> = {
   CREATED: "bg-gray-100 text-gray-600",
@@ -15,8 +16,152 @@ const STATUS_COLOR: Record<string, string> = {
   CANCELLED: "bg-gray-100 text-gray-400",
 };
 
+function NewJobModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [productId, setProductId] = useState("");
+  const [destinationId, setDestinationId] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [messageText, setMessageText] = useState("");
+  const [affiliateLink, setAffiliateLink] = useState("");
+
+  const { data: products } = useQuery({
+    queryKey: ["products-select"],
+    queryFn: () => api.get<{ data: any[] }>("/products?limit=100"),
+  });
+
+  const { data: destinations } = useQuery({
+    queryKey: ["destinations-select"],
+    queryFn: () => api.get<{ data: any[] }>("/destinations?limit=100"),
+  });
+
+  const { data: templates } = useQuery({
+    queryKey: ["templates-select"],
+    queryFn: () => api.get<{ data: any[] }>("/templates?limit=100"),
+  });
+
+  function handleProductChange(id: string) {
+    setProductId(id);
+    const product = products?.data.find((p: any) => p.id === id);
+    const activeLink = product?.affiliateLinks?.find((l: any) => l.isActive);
+    if (activeLink) setAffiliateLink(activeLink.url);
+  }
+
+  function handleTemplateChange(id: string) {
+    setTemplateId(id);
+    const tpl = templates?.data.find((t: any) => t.id === id);
+    if (tpl) setMessageText(tpl.body);
+  }
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.post("/send-jobs", { productId, destinationId, messageText, affiliateLink }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["send-jobs"] });
+      onClose();
+    },
+  });
+
+  const canSubmit = productId && destinationId && messageText.trim() && affiliateLink.trim();
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Novo job de envio</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Produto *</label>
+            <select
+              value={productId}
+              onChange={(e) => handleProductChange(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Selecione um produto</option>
+              {products?.data.map((p: any) => (
+                <option key={p.id} value={p.id}>{p.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Destino *</label>
+            <select
+              value={destinationId}
+              onChange={(e) => setDestinationId(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Selecione um destino</option>
+              {destinations?.data.map((d: any) => (
+                <option key={d.id} value={d.id}>{d.name} ({d.provider})</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Link de afiliado *</label>
+            <input
+              type="url"
+              value={affiliateLink}
+              onChange={(e) => setAffiliateLink(e.target.value)}
+              placeholder="https://..."
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Template (opcional)</label>
+            <select
+              value={templateId}
+              onChange={(e) => handleTemplateChange(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Nenhum — escrever manualmente</option>
+              {templates?.data.map((t: any) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Mensagem *</label>
+            <textarea
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              rows={5}
+              placeholder="Texto da mensagem a ser enviada..."
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-600 text-sm font-medium py-2 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => create.mutate()}
+            disabled={!canSubmit || create.isPending}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {create.isPending ? "Criando..." : "Criar job"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SendQueuePage() {
   const qc = useQueryClient();
+  const [showModal, setShowModal] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["send-jobs"],
@@ -41,9 +186,20 @@ export default function SendQueuePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Fila de envio</h1>
-        <p className="text-sm text-gray-500">{data?.total ?? 0} jobs no total</p>
+      {showModal && <NewJobModal onClose={() => setShowModal(false)} />}
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Fila de envio</h1>
+          <p className="text-sm text-gray-500">{data?.total ?? 0} jobs no total</p>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+        >
+          <Plus size={16} />
+          Novo job
+        </button>
       </div>
 
       {isLoading ? (
