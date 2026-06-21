@@ -28,7 +28,26 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
 
   const { data, isFetching, isError, error } = useQuery({
     queryKey: ["ml-search", searched],
-    queryFn: () => api.get<{ data: any[]; total: number }>(`/products/ml/search?q=${encodeURIComponent(searched)}&limit=12`),
+    queryFn: async () => {
+      const res = await fetch(
+        `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(searched)}&limit=12`
+      );
+      if (!res.ok) throw new Error("Erro ao buscar no Mercado Livre");
+      const json = await res.json();
+      const items = (json.results ?? []).map((item: any) => ({
+        mlItemId: item.id,
+        title: item.title,
+        price: item.price,
+        originalPrice: item.original_price ?? null,
+        thumbnail: item.thumbnail?.replace(/-I\.jpg$/, "-O.jpg") ?? item.thumbnail,
+        permalink: item.permalink,
+        condition: item.condition,
+        soldQuantity: item.sold_quantity,
+        sellerName: item.seller?.nickname ?? null,
+        alreadyImported: false,
+      }));
+      return { data: items as any[], total: json.paging?.total ?? 0 };
+    },
     enabled: searched.length >= 2,
     retry: 1,
   });
