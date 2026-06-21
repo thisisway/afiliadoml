@@ -3,10 +3,8 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ["@central-afiliado/shared"],
-  experimental: {
-    outputFileTracingRoot: path.join(__dirname, "../../"),
-  },
 };
 
 export default nextConfig;
