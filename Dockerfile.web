@@ -28,5 +28,9 @@ COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
+# Root package.json from the monorepo has "type":"module" which breaks
+# Next.js standalone server.js (CommonJS). Replace it with a minimal one.
+RUN echo '{"name":"web","version":"1.0.0"}' > package.json
+
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
