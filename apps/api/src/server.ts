@@ -24,7 +24,7 @@ const app = Fastify({
 // Plugins
 await app.register(helmet, { global: true });
 await app.register(cors, {
-  origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+  origin: true,
   credentials: true,
 });
 await app.register(rateLimit, {
