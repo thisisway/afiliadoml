@@ -17,7 +17,7 @@ RUN pnpm --filter @central-afiliado/api build
 
 # ─────────────────────────────────────────────
 FROM node:20-alpine AS runner
-RUN npm install -g pnpm@9.15.0
+RUN npm install -g pnpm@9.15.0 prisma@6
 WORKDIR /app
 
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/turbo.json ./
