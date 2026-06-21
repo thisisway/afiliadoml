@@ -13,6 +13,9 @@ RUN pnpm install --frozen-lockfile
 # Copia código e compila
 COPY . .
 RUN pnpm --filter @central-afiliado/database db:generate
+RUN pnpm --filter @central-afiliado/database build
+RUN cp -r packages/database/src/generated packages/database/dist/generated
+RUN pnpm --filter @central-afiliado/shared build
 RUN pnpm --filter @central-afiliado/api build
 
 # ─────────────────────────────────────────────
@@ -25,14 +28,14 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
-COPY --from=builder /app/packages/database/src/generated ./packages/database/src/generated
+COPY --from=builder /app/packages/database/dist ./packages/database/dist
 COPY --from=builder /app/packages/database/package.json ./packages/database/
 COPY --from=builder /app/packages/database/node_modules ./packages/database/node_modules
 COPY --from=builder /app/packages/database/prisma ./packages/database/prisma
-COPY --from=builder /app/packages/shared/src ./packages/shared/src
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 
 EXPOSE 3001
 
 # Roda migration e inicia servidor
-CMD sh -c "npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && node apps/api/dist/server.js"
+CMD ["sh", "-c", "prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss && node apps/api/dist/server.js"]
