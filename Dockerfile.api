@@ -1,0 +1,38 @@
+FROM node:20-alpine AS builder
+RUN npm install -g pnpm@9.15.0
+WORKDIR /app
+
+# Instala deps primeiro (cache layer)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/worker/package.json ./apps/worker/
+COPY packages/database/package.json ./packages/database/
+COPY packages/shared/package.json ./packages/shared/
+RUN pnpm install --frozen-lockfile
+
+# Copia código e compila
+COPY . .
+RUN pnpm --filter @central-afiliado/database db:generate
+RUN pnpm --filter @central-afiliado/api build
+
+# ─────────────────────────────────────────────
+FROM node:20-alpine AS runner
+RUN npm install -g pnpm@9.15.0
+WORKDIR /app
+
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/turbo.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/package.json ./apps/api/
+COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=builder /app/packages/database/src/generated ./packages/database/src/generated
+COPY --from=builder /app/packages/database/package.json ./packages/database/
+COPY --from=builder /app/packages/database/node_modules ./packages/database/node_modules
+COPY --from=builder /app/packages/database/prisma ./packages/database/prisma
+COPY --from=builder /app/packages/shared/src ./packages/shared/src
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/
+
+EXPOSE 3001
+
+# Roda migration e inicia servidor
+CMD sh -c "npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && node apps/api/dist/server.js"

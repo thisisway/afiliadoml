@@ -1,0 +1,355 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// ENUMS
+// ===========================================================================
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum Marketplace {
+  SHOPEE
+  MERCADOLIVRE
+}
+
+enum ProductStatus {
+  NEW
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  SENT
+  PAUSED
+  REJECTED
+  EXPIRED
+  UNAVAILABLE
+}
+
+enum CouponStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+  FREE_SHIPPING
+  UNKNOWN
+}
+
+enum DestinationType {
+  WHATSAPP_GROUP
+  WHATSAPP_CHANNEL
+  WHATSAPP_CONTACT
+  TELEGRAM_CHANNEL
+  EMAIL
+  WEBHOOK
+}
+
+enum MessagingProviderType {
+  WHATSAPP_BUSINESS_API
+  TELEGRAM_BOT
+  MANUAL
+  WEBHOOK
+}
+
+enum SendJobStatus {
+  CREATED
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  APPROVE
+  REJECT
+  SEND
+  CANCEL
+}
+
+// ===========================================================================
+// USUÁRIOS E ORGANIZAÇÕES
+// ===========================================================================
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(OPERATOR)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sendJobs  SendJob[]
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+// ===========================================================================
+// PRODUTOS
+// ===========================================================================
+
+model Product {
+  id              String        @id @default(cuid())
+  marketplace     Marketplace
+  externalId      String?
+  title           String
+  description     String?
+  originalUrl     String?
+  imageUrl        String?
+  price           Decimal       @db.Decimal(10, 2)
+  oldPrice        Decimal?      @db.Decimal(10, 2)
+  discountPercent Int?
+  sellerName      String?
+  sellerRating    Decimal?      @db.Decimal(3, 2)
+  shippingInfo    String?
+  category        String?
+  commissionRate  Decimal?      @db.Decimal(5, 2)
+  status          ProductStatus @default(NEW)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  affiliateLinks     AffiliateLink[]
+  coupons            ProductCoupon[]
+  sendJobs           SendJob[]
+  clickLinks         ClickLink[]
+  generatedMessages  GeneratedMessage[]
+
+  @@index([marketplace, status])
+  @@index([status])
+  @@map("products")
+}
+
+model AffiliateLink {
+  id         String   @id @default(cuid())
+  productId  String
+  url        String
+  trackingId String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("affiliate_links")
+}
+
+// ===========================================================================
+// CUPONS
+// ===========================================================================
+
+model Coupon {
+  id            String       @id @default(cuid())
+  marketplace   Marketplace
+  code          String
+  description   String?
+  discountType  DiscountType?
+  discountValue Decimal?     @db.Decimal(10, 2)
+  startsAt      DateTime?
+  expiresAt     DateTime?
+  minOrderValue Decimal?     @db.Decimal(10, 2)
+  status        CouponStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  products  ProductCoupon[]
+  sendJobs  SendJob[]
+
+  @@index([marketplace, status])
+  @@map("coupons")
+}
+
+model ProductCoupon {
+  productId String
+  couponId  String
+  assignedAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  coupon  Coupon  @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  @@id([productId, couponId])
+  @@map("product_coupons")
+}
+
+// ===========================================================================
+// TEMPLATES E MENSAGENS GERADAS
+// ===========================================================================
+
+model MessageTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  body        String
+  tone        String?
+  marketplace Marketplace?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  generatedMessages GeneratedMessage[]
+
+  @@map("message_templates")
+}
+
+model GeneratedMessage {
+  id         String   @id @default(cuid())
+  productId  String
+  templateId String?
+  tone       String?
+  body       String
+  approved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  product  Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  template MessageTemplate? @relation(fields: [templateId], references: [id])
+  sendJobs SendJob[]
+
+  @@index([productId])
+  @@map("generated_messages")
+}
+
+// ===========================================================================
+// DESTINOS DE ENVIO
+// ===========================================================================
+
+model Destination {
+  id              String               @id @default(cuid())
+  name            String
+  type            DestinationType
+  provider        MessagingProviderType
+  externalId      String?
+  webhookUrl      String?
+  isActive        Boolean              @default(true)
+  dailyLimit      Int?
+  intervalMinutes Int?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  sendJobs SendJob[]
+
+  @@map("destinations")
+}
+
+// ===========================================================================
+// FILA DE ENVIO
+// ===========================================================================
+
+model SendJob {
+  id                 String        @id @default(cuid())
+  productId          String
+  destinationId      String
+  generatedMessageId String?
+  couponId           String?
+  userId             String?
+  messageText        String
+  mediaUrl           String?
+  affiliateLink      String
+  scheduledAt        DateTime?
+  sentAt             DateTime?
+  status             SendJobStatus @default(CREATED)
+  errorMessage       String?
+  retryCount         Int           @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  product          Product           @relation(fields: [productId], references: [id])
+  destination      Destination       @relation(fields: [destinationId], references: [id])
+  generatedMessage GeneratedMessage? @relation(fields: [generatedMessageId], references: [id])
+  coupon           Coupon?           @relation(fields: [couponId], references: [id])
+  user             User?             @relation(fields: [userId], references: [id])
+
+  @@index([status, scheduledAt])
+  @@index([productId])
+  @@map("send_jobs")
+}
+
+// ===========================================================================
+// ENCURTADOR DE LINKS E RASTREAMENTO DE CLIQUES
+// ===========================================================================
+
+model ClickLink {
+  id        String   @id @default(cuid())
+  shortCode String   @unique
+  productId String
+  targetUrl String
+  createdAt DateTime @default(now())
+
+  product      Product      @relation(fields: [productId], references: [id])
+  clickEvents  ClickEvent[]
+
+  @@index([shortCode])
+  @@map("click_links")
+}
+
+model ClickEvent {
+  id          String   @id @default(cuid())
+  clickLinkId String
+  shortCode   String
+  clickedAt   DateTime @default(now())
+  userAgent   String?
+  ipHash      String?
+  referrer    String?
+  deviceType  String?
+
+  clickLink ClickLink @relation(fields: [clickLinkId], references: [id], onDelete: Cascade)
+
+  @@index([clickLinkId])
+  @@index([clickedAt])
+  @@map("click_events")
+}
+
+// ===========================================================================
+// AUDIT LOG
+// ===========================================================================
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String?
+  action     AuditAction
+  entity     String
+  entityId   String?
+  details    Json?
+  ip         String?
+  createdAt  DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ===========================================================================
+// CONFIGURAÇÕES
+// ===========================================================================
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
