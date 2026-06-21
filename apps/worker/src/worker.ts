@@ -1,10 +1,17 @@
 import { Worker, Queue } from "bullmq";
-import IORedis from "ioredis";
 import { prisma } from "@central-afiliado/database";
 
-const connection = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
-  maxRetriesPerRequest: null,
-});
+function parseRedisUrl(url: string) {
+  const u = new URL(url);
+  return {
+    host: u.hostname,
+    port: Number(u.port) || 6379,
+    password: u.password ? decodeURIComponent(u.password) : undefined,
+    maxRetriesPerRequest: null as null,
+  };
+}
+
+const connection = parseRedisUrl(process.env.REDIS_URL ?? "redis://localhost:6379");
 
 export const sendQueue = new Queue("send-queue", { connection });
 
@@ -34,8 +41,6 @@ const worker = new Worker(
       data: { status: "PROCESSING" },
     });
 
-    // MVP: modo manual — apenas marca como SENT
-    // Futuramente: chamar MessagingProvider real aqui
     if (sendJob.destination.provider === "MANUAL") {
       await prisma.sendJob.update({
         where: { id: sendJobId },
@@ -45,7 +50,6 @@ const worker = new Worker(
       return;
     }
 
-    // Placeholder para provedores reais
     throw new Error(`Provider ${sendJob.destination.provider} não implementado no MVP`);
   },
   {

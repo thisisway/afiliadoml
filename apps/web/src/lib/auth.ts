@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "./api.js";
+import { api } from "./api";
 
 export async function login(email: string, password: string) {
   const res = await api.post<{ data: { token: string; user: any } }>("/auth/login", { email, password });
