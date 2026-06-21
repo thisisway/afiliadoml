@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { prisma } from "../../lib/prisma.js";
 import {
   createProductSchema,
   updateProductSchema,
@@ -13,10 +15,89 @@ import {
   updateProductStatus,
 } from "./product.service.js";
 
+const ML_API = "https://api.mercadolibre.com";
+
 const auth = { preHandler: [(app: any) => app.authenticate] };
 
 export async function productRoutes(app: FastifyInstance) {
   const authenticate = { preHandler: [app.authenticate] };
+
+  // ── Mercado Livre integration ──────────────────────────────────────────────
+
+  app.get("/ml/search", { ...authenticate }, async (request, reply) => {
+    const { q, limit = "10" } = request.query as { q?: string; limit?: string };
+    if (!q || q.trim().length < 2) {
+      return reply.status(400).send({ error: "Parâmetro 'q' obrigatório (mín. 2 chars)" });
+    }
+    const url = `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${limit}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      return reply.status(502).send({ error: "Erro ao buscar no Mercado Livre" });
+    }
+    const json = await res.json() as any;
+    const items = (json.results ?? []).map((item: any) => ({
+      mlItemId:       item.id,
+      title:          item.title,
+      price:          item.price,
+      originalPrice:  item.original_price ?? null,
+      thumbnail:      item.thumbnail?.replace(/\-I\.jpg$/, "-O.jpg") ?? item.thumbnail,
+      permalink:      item.permalink,
+      condition:      item.condition,
+      soldQuantity:   item.sold_quantity,
+      sellerName:     item.seller?.nickname ?? null,
+      alreadyImported: false,
+    }));
+
+    // mark which ones are already in DB
+    const ids = items.map((i: any) => i.mlItemId);
+    const existing = await prisma.product.findMany({
+      where: { externalId: { in: ids } },
+      select: { externalId: true },
+    });
+    const existingSet = new Set(existing.map((p: any) => p.externalId));
+    items.forEach((i: any) => { i.alreadyImported = existingSet.has(i.mlItemId); });
+
+    return reply.send({ data: items, total: json.paging?.total ?? 0 });
+  });
+
+  app.post("/ml/import", { ...authenticate }, async (request, reply) => {
+    const { mlItemId } = z.object({ mlItemId: z.string().min(1) }).parse(request.body);
+
+    const existing = await prisma.product.findFirst({ where: { externalId: mlItemId } });
+    if (existing) {
+      return reply.status(409).send({ error: "Produto já importado", data: existing });
+    }
+
+    const itemRes = await fetch(`${ML_API}/items/${mlItemId}`);
+    if (!itemRes.ok) {
+      return reply.status(404).send({ error: "Item não encontrado no Mercado Livre" });
+    }
+    const item = await itemRes.json() as any;
+
+    const discountPercent = item.original_price && item.price < item.original_price
+      ? Math.round((1 - item.price / item.original_price) * 100)
+      : null;
+
+    const product = await prisma.product.create({
+      data: {
+        marketplace:    "MERCADOLIVRE",
+        externalId:     item.id,
+        title:          item.title,
+        originalUrl:    item.permalink ?? null,
+        imageUrl:       item.pictures?.[0]?.url ?? null,
+        price:          item.price,
+        oldPrice:       item.original_price ?? null,
+        discountPercent,
+        sellerName:     item.seller_id ? String(item.seller_id) : null,
+        category:       item.category_id ?? null,
+        status:         "NEW",
+      },
+    });
+
+    return reply.status(201).send({ data: product });
+  });
+
+  // ── CRUD ───────────────────────────────────────────────────────────────────
 
   app.get("/", { ...authenticate }, async (request, reply) => {
     const query = productQuerySchema.safeParse(request.query);
