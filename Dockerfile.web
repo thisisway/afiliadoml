@@ -32,4 +32,4 @@ COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 
 EXPOSE 3000
-CMD ["sh", "-c", "node_modules/.bin/next start --dir apps/web"]
+CMD ["sh", "-c", "node node_modules/next/dist/bin/next start apps/web"]
