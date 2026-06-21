@@ -13,6 +13,7 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+RUN pnpm --filter @central-afiliado/shared build
 RUN pnpm --filter @central-afiliado/web build
 
 # ─────────────────────────────────────────────
@@ -27,8 +28,8 @@ COPY --from=builder /app/apps/web/.next ./apps/web/.next
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/package.json ./apps/web/
 COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
-COPY --from=builder /app/packages/shared/src ./packages/shared/src
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 
 EXPOSE 3000
-CMD ["node", "apps/web/node_modules/.bin/next", "start", "--prefix", "apps/web"]
+CMD ["sh", "-c", "node_modules/.bin/next start --dir apps/web"]
