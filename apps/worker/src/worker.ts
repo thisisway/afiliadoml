@@ -13,7 +13,13 @@ function parseRedisUrl(url: string) {
 
 const connection = parseRedisUrl(process.env.REDIS_URL ?? "redis://localhost:6379");
 
-export const sendQueue = new Queue("send-queue", { connection });
+export const sendQueue = new Queue("send-queue", {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5000 },
+  },
+});
 
 const worker = new Worker(
   "send-queue",
@@ -55,10 +61,6 @@ const worker = new Worker(
   {
     connection,
     concurrency: 5,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 5000 },
-    },
   }
 );
 
