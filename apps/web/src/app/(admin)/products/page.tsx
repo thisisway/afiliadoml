@@ -26,10 +26,11 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
   const [imported, setImported] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isError, error } = useQuery({
     queryKey: ["ml-search", searched],
     queryFn: () => api.get<{ data: any[]; total: number }>(`/products/ml/search?q=${encodeURIComponent(searched)}&limit=12`),
     enabled: searched.length >= 2,
+    retry: 1,
   });
 
   function handleSearch() {
@@ -113,13 +114,22 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {!isFetching && searched && data?.data.length === 0 && (
+          {!isFetching && isError && (
+            <div className="flex flex-col items-center justify-center py-12 gap-2">
+              <p className="text-sm font-medium text-red-500">Erro ao buscar no Mercado Livre</p>
+              <p className="text-xs text-gray-400 text-center max-w-sm">
+                {(error as Error)?.message ?? "Verifique se a API está acessível"}
+              </p>
+            </div>
+          )}
+
+          {!isFetching && !isError && searched && data?.data.length === 0 && (
             <div className="text-center py-12 text-gray-400 text-sm">
               Nenhum resultado encontrado para "{searched}"
             </div>
           )}
 
-          {!isFetching && data && data.data.length > 0 && (
+          {!isFetching && !isError && data && data.data.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {data.data.map((item: any) => {
                 const isImported = imported.has(item.mlItemId) || item.alreadyImported;
