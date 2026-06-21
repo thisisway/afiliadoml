@@ -14,6 +14,7 @@ import { sendJobRoutes } from "./modules/send-jobs/send-job.routes.js";
 import { trackingRoutes } from "./modules/tracking/tracking.routes.js";
 import { reportRoutes } from "./modules/reports/report.routes.js";
 import { copyRoutes } from "./modules/copy/copy.routes.js";
+import { settingRoutes } from "./modules/settings/setting.routes.js";
 
 const app = Fastify({
   logger: {
@@ -56,6 +57,7 @@ await app.register(sendJobRoutes, { prefix: "/send-jobs" });
 await app.register(copyRoutes, { prefix: "/products" });
 await app.register(trackingRoutes, { prefix: "/" });
 await app.register(reportRoutes, { prefix: "/reports" });
+await app.register(settingRoutes, { prefix: "/settings" });
 
 // Health check
 app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));

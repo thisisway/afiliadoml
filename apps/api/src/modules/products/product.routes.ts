@@ -94,7 +94,18 @@ export async function productRoutes(app: FastifyInstance) {
       },
     });
 
-    return reply.status(201).send({ data: product });
+    // Auto-generate affiliate link if ml_affiliate_id is configured
+    let affiliateLink: string | null = null;
+    if (item.permalink) {
+      const affiliateSetting = await prisma.setting.findUnique({ where: { key: "ml_affiliate_id" } });
+      if (affiliateSetting?.value) {
+        const url = `${item.permalink}?matt_tool=${affiliateSetting.value}&matt_word=central-afiliado&matt_source=whatsapp&matt_medium=social`;
+        await prisma.affiliateLink.create({ data: { productId: product.id, url, trackingId: affiliateSetting.value } });
+        affiliateLink = url;
+      }
+    }
+
+    return reply.status(201).send({ data: { ...product, affiliateLink } });
   });
 
   // ── CRUD ───────────────────────────────────────────────────────────────────
