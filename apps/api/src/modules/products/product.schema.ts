@@ -26,7 +26,7 @@ export const updateProductSchema = createProductSchema.partial().extend({
 
 export const productQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().min(1).max(100).default(20),
+  limit: z.coerce.number().min(1).max(500).default(20),
   marketplace: z.enum(["SHOPEE", "MERCADOLIVRE"]).optional(),
   status: z.string().optional(),
   search: z.string().optional(),
