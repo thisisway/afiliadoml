@@ -34,7 +34,13 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
         `/api/ml/search?q=${encodeURIComponent(searched)}&limit=12`,
         { headers: { authorization: `Bearer ${token}` } }
       );
-      const json = await res.json();
+      const text = await res.text();
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(`Serviço indisponível (${res.status}) — aguarde o deploy e tente novamente`);
+      }
       if (!res.ok) throw new Error(json.message ?? json.error ?? "Erro na busca");
       return json as { data: any[]; total: number };
     },

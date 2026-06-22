@@ -24,7 +24,16 @@ export async function GET(request: NextRequest) {
       { headers: { authorization }, signal: controller.signal }
     );
 
-    const data = await res.json();
+    const text = await res.text();
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return NextResponse.json(
+        { error: `API returned non-JSON response (status ${res.status})` },
+        { status: 502 }
+      );
+    }
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     const message =
