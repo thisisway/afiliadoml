@@ -28,10 +28,16 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
 
   const { data, isFetching, isError, error } = useQuery({
     queryKey: ["ml-search", searched],
-    queryFn: () =>
-      api.get<{ data: any[]; total: number }>(
-        `/products/ml/search?q=${encodeURIComponent(searched)}&limit=12`
-      ),
+    queryFn: async () => {
+      const token = localStorage.getItem("token") ?? "";
+      const res = await fetch(
+        `/api/ml/search?q=${encodeURIComponent(searched)}&limit=12`,
+        { headers: { authorization: `Bearer ${token}` } }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? json.error ?? "Erro na busca");
+      return json as { data: any[]; total: number };
+    },
     enabled: searched.length >= 2,
     retry: 1,
   });
