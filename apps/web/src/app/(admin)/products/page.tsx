@@ -32,7 +32,10 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
       const res = await fetch(
         `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(searched)}&limit=12`
       );
-      if (!res.ok) throw new Error("Erro ao buscar no Mercado Livre");
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`ML API erro ${res.status}: ${body.slice(0, 120)}`);
+      }
       const json = await res.json();
       const items = (json.results ?? []).map((item: any) => ({
         mlItemId: item.id,
