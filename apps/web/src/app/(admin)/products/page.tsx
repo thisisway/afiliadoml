@@ -1,21 +1,26 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Plus, ExternalLink, Download, Search, X, Check, ShoppingBag } from "lucide-react";
+import { Plus, ExternalLink, Download, Search, X, Check, ShoppingBag, Loader2 } from "lucide-react";
 import { useState, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  NEW: { label: "Novo", color: "bg-gray-100 text-gray-600" },
-  PENDING_APPROVAL: { label: "Pendente", color: "bg-yellow-100 text-yellow-700" },
-  APPROVED: { label: "Aprovado", color: "bg-green-100 text-green-700" },
-  SCHEDULED: { label: "Agendado", color: "bg-blue-100 text-blue-700" },
-  SENT: { label: "Enviado", color: "bg-purple-100 text-purple-700" },
-  PAUSED: { label: "Pausado", color: "bg-orange-100 text-orange-700" },
-  REJECTED: { label: "Rejeitado", color: "bg-red-100 text-red-700" },
-  EXPIRED: { label: "Expirado", color: "bg-gray-100 text-gray-400" },
-  UNAVAILABLE: { label: "Indisponível", color: "bg-gray-100 text-gray-400" },
+type BadgeVariant = "basic" | "warning" | "success" | "info" | "primary" | "danger";
+
+const STATUS_LABELS: Record<string, { label: string; variant: BadgeVariant }> = {
+  NEW:              { label: "Novo",         variant: "basic" },
+  PENDING_APPROVAL: { label: "Pendente",     variant: "warning" },
+  APPROVED:         { label: "Aprovado",     variant: "success" },
+  SCHEDULED:        { label: "Agendado",     variant: "info" },
+  SENT:             { label: "Enviado",      variant: "primary" },
+  PAUSED:           { label: "Pausado",      variant: "warning" },
+  REJECTED:         { label: "Rejeitado",    variant: "danger" },
+  EXPIRED:          { label: "Expirado",     variant: "basic" },
+  UNAVAILABLE:      { label: "Indisponível", variant: "basic" },
 };
 
 function ImportMLModal({ onClose }: { onClose: () => void }) {
@@ -36,9 +41,7 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
       );
       const json = await res.json().catch(() => null);
       if (!res.ok || !json) {
-        throw new Error(
-          json?.error ?? json?.message ?? `Erro ${res.status} ao buscar`
-        );
+        throw new Error(json?.error ?? json?.message ?? `Erro ${res.status} ao buscar`);
       }
       return json as { data: any[]; total: number };
     },
@@ -68,24 +71,26 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 bg-basic-900/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-card-hover w-full max-w-3xl flex flex-col max-h-[88vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <ShoppingBag size={18} className="text-yellow-500" />
-            <h2 className="text-base font-semibold text-gray-900">Importar do Mercado Livre</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-basic-300">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-md bg-warning-100 flex items-center justify-center">
+              <ShoppingBag size={16} className="text-warning-700" />
+            </div>
+            <h2 className="text-sm font-semibold text-basic-800">Importar do Mercado Livre</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-basic-500 hover:text-basic-800 transition-colors">
             <X size={18} />
           </button>
         </div>
 
         {/* Search */}
-        <div className="px-6 py-4 border-b border-gray-100">
+        <div className="px-6 py-4 border-b border-basic-300">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-basic-500" />
               <input
                 ref={inputRef}
                 type="text"
@@ -93,21 +98,22 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 placeholder="Ex: tênis adidas, iphone 15, air fryer..."
-                className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                className="input pl-9"
                 autoFocus
               />
             </div>
-            <button
+            <Button
               onClick={handleSearch}
               disabled={query.trim().length < 2}
-              className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              variant="primary"
+              size="md"
             >
               Buscar
-            </button>
+            </Button>
           </div>
           {data && searched && (
-            <p className="text-xs text-gray-400 mt-2">
-              {data.total.toLocaleString("pt-BR")} resultados para "{searched}"
+            <p className="text-xs text-basic-600 mt-2">
+              {data.total.toLocaleString("pt-BR")} resultados para &ldquo;{searched}&rdquo;
             </p>
           )}
         </div>
@@ -115,35 +121,36 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
         {/* Results */}
         <div className="overflow-y-auto flex-1 p-4">
           {isFetching && (
-            <div className="flex items-center justify-center py-12 text-gray-400 text-sm">
+            <div className="flex items-center justify-center gap-2 py-12 text-basic-600 text-sm">
+              <Loader2 size={16} className="animate-spin" />
               Buscando no Mercado Livre...
             </div>
           )}
 
           {!isFetching && !searched && (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-400 text-sm gap-2">
-              <ShoppingBag size={32} className="text-gray-200" />
+            <div className="flex flex-col items-center justify-center py-12 text-basic-500 text-sm gap-2">
+              <ShoppingBag size={32} className="text-basic-400" />
               <p>Digite um produto para buscar</p>
             </div>
           )}
 
           {!isFetching && isError && (
             <div className="flex flex-col items-center justify-center py-12 gap-2">
-              <p className="text-sm font-medium text-red-500">Erro ao buscar no Mercado Livre</p>
-              <p className="text-xs text-gray-400 text-center max-w-sm">
+              <p className="text-sm font-semibold text-danger-500">Erro ao buscar no Mercado Livre</p>
+              <p className="text-xs text-basic-600 text-center max-w-sm">
                 {(error as Error)?.message ?? "Verifique se a API está acessível"}
               </p>
             </div>
           )}
 
           {!isFetching && !isError && searched && data?.data.length === 0 && (
-            <div className="text-center py-12 text-gray-400 text-sm">
-              Nenhum resultado encontrado para "{searched}"
+            <div className="text-center py-12 text-basic-500 text-sm">
+              Nenhum resultado encontrado para &ldquo;{searched}&rdquo;
             </div>
           )}
 
           {!isFetching && !isError && data && data.data.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {data.data.map((item: any) => {
                 const isImported = imported.has(item.mlItemId) || item.alreadyImported;
                 const isLoading = importing === item.mlItemId;
@@ -154,50 +161,51 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
                 return (
                   <div
                     key={item.mlItemId}
-                    className={`flex gap-3 p-3 rounded-xl border transition-colors ${
-                      isImported ? "border-green-200 bg-green-50" : "border-gray-200 hover:border-gray-300 bg-white"
+                    className={`flex gap-3 p-3 rounded-lg border transition-all ${
+                      isImported
+                        ? "border-success-300 bg-success-100/40"
+                        : "border-basic-300 hover:border-primary-300 bg-white"
                     }`}
                   >
                     {item.thumbnail && (
                       <img
                         src={item.thumbnail}
                         alt=""
-                        className="w-16 h-16 rounded-lg object-cover flex-shrink-0 bg-gray-100"
+                        className="w-16 h-16 rounded-md object-cover flex-shrink-0 bg-basic-300"
                       />
                     )}
                     <div className="flex-1 min-w-0 space-y-1">
-                      <p className="text-xs font-medium text-gray-800 line-clamp-2 leading-snug">
+                      <p className="text-xs font-medium text-basic-800 line-clamp-2 leading-snug">
                         {item.title}
                       </p>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-gray-900">
+                        <span className="text-sm font-bold text-basic-900">
                           R$ {Number(item.price).toFixed(2)}
                         </span>
                         {discount && discount > 0 && (
-                          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
-                            -{discount}%
-                          </span>
+                          <Badge variant="success">-{discount}%</Badge>
                         )}
                       </div>
                       {item.sellerName && (
-                        <p className="text-xs text-gray-400 truncate">{item.sellerName}</p>
+                        <p className="text-xs text-basic-500 truncate">{item.sellerName}</p>
                       )}
                     </div>
                     <div className="flex-shrink-0 flex items-center">
                       {isImported ? (
-                        <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                        <span className="flex items-center gap-1 text-xs text-success-700 font-semibold">
                           <Check size={13} />
                           Importado
                         </span>
                       ) : (
-                        <button
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          loading={isLoading}
                           onClick={() => handleImport(item)}
-                          disabled={isLoading}
-                          className="flex items-center gap-1 text-xs bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                         >
                           <Download size={12} />
-                          {isLoading ? "..." : "Importar"}
-                        </button>
+                          Importar
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -208,16 +216,13 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between">
-          <p className="text-xs text-gray-400">
+        <div className="px-6 py-3 border-t border-basic-300 flex items-center justify-between">
+          <p className="text-xs text-basic-500">
             Após importar, abra o produto para adicionar seu link de afiliado
           </p>
-          <button
-            onClick={onClose}
-            className="text-sm text-gray-500 hover:text-gray-700 font-medium"
-          >
+          <Button variant="basic" size="sm" onClick={onClose}>
             Fechar
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -236,74 +241,74 @@ export default function ProductsPage() {
     <div className="space-y-6">
       {showImport && <ImportMLModal onClose={() => setShowImport(false)} />}
 
+      {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Produtos</h1>
-          <p className="text-sm text-gray-500">{data?.total ?? 0} produtos cadastrados</p>
+          <h1 className="text-xl font-bold text-basic-800">Produtos</h1>
+          <p className="text-sm text-basic-600 mt-0.5">{data?.total ?? 0} produtos cadastrados</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowImport(true)}
-            className="flex items-center gap-2 border border-yellow-400 text-yellow-600 hover:bg-yellow-50 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
+          <Button variant="outline" size="md" onClick={() => setShowImport(true)}>
             <Download size={15} />
             Importar do ML
-          </button>
-          <Link
-            href="/products/new"
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            <Plus size={16} />
-            Novo produto
+          </Button>
+          <Link href="/products/new">
+            <Button size="md">
+              <Plus size={15} />
+              Novo produto
+            </Button>
           </Link>
         </div>
       </div>
 
+      {/* Table */}
       {isLoading ? (
-        <div className="text-sm text-gray-400">Carregando...</div>
+        <div className="flex items-center gap-2 text-sm text-basic-500 py-8">
+          <Loader2 size={16} className="animate-spin" />
+          Carregando...
+        </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <Card padding="none">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-400 text-xs border-b bg-gray-50">
-                <th className="px-4 py-3 font-medium">Produto</th>
-                <th className="px-4 py-3 font-medium">Marketplace</th>
-                <th className="px-4 py-3 font-medium">Preço</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Ações</th>
+              <tr className="text-left border-b border-basic-300 bg-basic-200">
+                <th className="px-5 py-3 text-xs font-semibold text-basic-600 uppercase tracking-wide">Produto</th>
+                <th className="px-5 py-3 text-xs font-semibold text-basic-600 uppercase tracking-wide">Marketplace</th>
+                <th className="px-5 py-3 text-xs font-semibold text-basic-600 uppercase tracking-wide">Preço</th>
+                <th className="px-5 py-3 text-xs font-semibold text-basic-600 uppercase tracking-wide">Status</th>
+                <th className="px-5 py-3 text-xs font-semibold text-basic-600 uppercase tracking-wide">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-basic-200">
               {data?.data.map((p: any) => {
-                const status = STATUS_LABELS[p.status] ?? { label: p.status, color: "bg-gray-100 text-gray-600" };
+                const status = STATUS_LABELS[p.status] ?? { label: p.status, variant: "basic" as BadgeVariant };
                 return (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
+                  <tr key={p.id} className="hover:bg-basic-200/50 transition-colors">
+                    <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         {p.imageUrl ? (
-                          <img src={p.imageUrl} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                          <img src={p.imageUrl} alt="" className="w-9 h-9 rounded-md object-cover flex-shrink-0 bg-basic-300" />
                         ) : (
-                          <div className="w-8 h-8 rounded bg-gray-100 flex-shrink-0" />
+                          <div className="w-9 h-9 rounded-md bg-basic-300 flex-shrink-0" />
                         )}
-                        <span className="font-medium text-gray-800 truncate max-w-[280px]">{p.title}</span>
+                        <span className="font-medium text-basic-800 truncate max-w-[280px]">{p.title}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{p.marketplace}</td>
-                    <td className="px-4 py-3 font-medium text-gray-800">
+                    <td className="px-5 py-3.5">
+                      <Badge variant="info">{p.marketplace}</Badge>
+                    </td>
+                    <td className="px-5 py-3.5 font-semibold text-basic-800">
                       R$ {Number(p.price).toFixed(2)}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
-                        {status.label}
-                      </span>
+                    <td className="px-5 py-3.5">
+                      <Badge variant={status.variant}>{status.label}</Badge>
                     </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/products/${p.id}`}
-                        className="text-blue-600 hover:text-blue-800 text-xs font-medium flex items-center gap-1"
-                      >
-                        <ExternalLink size={12} />
-                        Ver
+                    <td className="px-5 py-3.5">
+                      <Link href={`/products/${p.id}`}>
+                        <Button variant="ghost" size="xs">
+                          <ExternalLink size={12} />
+                          Ver
+                        </Button>
                       </Link>
                     </td>
                   </tr>
@@ -311,21 +316,29 @@ export default function ProductsPage() {
               })}
               {data?.data.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-sm">
-                    Nenhum produto ainda.{" "}
-                    <button onClick={() => setShowImport(true)} className="text-yellow-600 hover:underline">
-                      Importar do ML
-                    </button>{" "}
-                    ou{" "}
-                    <Link href="/products/new" className="text-blue-600 hover:underline">
-                      adicionar manualmente
-                    </Link>
+                  <td colSpan={5} className="px-5 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3 text-basic-500">
+                      <ShoppingBag size={32} className="text-basic-400" />
+                      <p className="text-sm">Nenhum produto ainda.</p>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+                          <Download size={13} />
+                          Importar do ML
+                        </Button>
+                        <Link href="/products/new">
+                          <Button size="sm">
+                            <Plus size={13} />
+                            Adicionar
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </div>
   );
