@@ -29,20 +29,37 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
   const { data, isFetching, isError, error } = useQuery({
     queryKey: ["ml-search", searched],
     queryFn: async () => {
-      const token = localStorage.getItem("token") ?? "";
-      const res = await fetch(
-        `/api/ml/search?q=${encodeURIComponent(searched)}&limit=12`,
-        { headers: { authorization: `Bearer ${token}` } }
-      );
-      const text = await res.text();
-      let json: any;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        throw new Error(`Serviço indisponível (${res.status}) — aguarde o deploy e tente novamente`);
+      const [mlRes, productsData] = await Promise.all([
+        fetch(
+          `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(searched)}&limit=12`
+        ),
+        api.get<{ data: { externalId: string | null }[] }>("/products?limit=500"),
+      ]);
+
+      if (!mlRes.ok) {
+        const err = await mlRes.json().catch(() => ({})) as any;
+        throw new Error(err.message ?? `ML API retornou ${mlRes.status}`);
       }
-      if (!res.ok) throw new Error(json.message ?? json.error ?? "Erro na busca");
-      return json as { data: any[]; total: number };
+
+      const mlJson = await mlRes.json() as any;
+      const importedIds = new Set(
+        productsData.data.map((p) => p.externalId).filter(Boolean)
+      );
+
+      const items = (mlJson.results ?? []).map((item: any) => ({
+        mlItemId:        item.id,
+        title:           item.title,
+        price:           item.price,
+        originalPrice:   item.original_price ?? null,
+        thumbnail:       item.thumbnail?.replace(/-I\.jpg$/, "-O.jpg") ?? item.thumbnail,
+        permalink:       item.permalink,
+        condition:       item.condition,
+        soldQuantity:    item.sold_quantity,
+        sellerName:      item.seller?.nickname ?? null,
+        alreadyImported: importedIds.has(item.id),
+      }));
+
+      return { data: items, total: mlJson.paging?.total ?? 0 };
     },
     enabled: searched.length >= 2,
     retry: 1,
