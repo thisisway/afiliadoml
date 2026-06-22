@@ -62,6 +62,20 @@ await app.register(settingRoutes, { prefix: "/settings" });
 // Health check
 app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
 
+// Connectivity test — checks if container can reach ML API
+app.get("/health/ml", async (_req, reply) => {
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 8_000);
+    const res = await fetch("https://api.mercadolibre.com/sites/MLB", { signal: controller.signal });
+    clearTimeout(tid);
+    const json = await res.json();
+    return reply.send({ ok: res.ok, status: res.status, site: (json as any)?.id ?? null });
+  } catch (err: any) {
+    return reply.status(502).send({ ok: false, error: err?.message ?? String(err) });
+  }
+});
+
 const port = Number(process.env.API_PORT ?? 3001);
 const host = process.env.API_HOST ?? "0.0.0.0";
 
