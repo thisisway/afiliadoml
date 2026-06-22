@@ -62,15 +62,20 @@ await app.register(settingRoutes, { prefix: "/settings" });
 // Health check
 app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
 
-// Connectivity test — checks if container can reach ML API
+// Connectivity test — checks if container can reach ML API (with token if configured)
 app.get("/health/ml", async (_req, reply) => {
+  const { getMLToken, mlHeaders } = await import("./lib/ml-auth.js");
+  const token = await getMLToken();
   try {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 8_000);
-    const res = await fetch("https://api.mercadolibre.com/sites/MLB", { signal: controller.signal });
+    const res = await fetch("https://api.mercadolibre.com/sites/MLB", {
+      signal: controller.signal,
+      headers: mlHeaders(token),
+    });
     clearTimeout(tid);
     const json = await res.json();
-    return reply.send({ ok: res.ok, status: res.status, site: (json as any)?.id ?? null });
+    return reply.send({ ok: res.ok, status: res.status, site: (json as any)?.id ?? null, authenticated: !!token });
   } catch (err: any) {
     return reply.status(502).send({ ok: false, error: err?.message ?? String(err) });
   }

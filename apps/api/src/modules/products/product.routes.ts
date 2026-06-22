@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
+import { getMLToken, mlHeaders } from "../../lib/ml-auth.js";
 import {
   createProductSchema,
   updateProductSchema,
@@ -31,11 +32,12 @@ export async function productRoutes(app: FastifyInstance) {
     }
     const url = `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${limit}`;
 
+    const token = await getMLToken();
     let res: Response;
     try {
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), 10_000);
-      res = await fetch(url, { signal: controller.signal });
+      res = await fetch(url, { signal: controller.signal, headers: mlHeaders(token) });
       clearTimeout(tid);
     } catch (err: any) {
       return reply.status(502).send({ error: `Sem acesso à ML API: ${err?.message ?? err}` });
@@ -78,9 +80,10 @@ export async function productRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: "Produto já importado", data: existing });
     }
 
+    const token = await getMLToken();
     let itemRes: Response;
     try {
-      itemRes = await fetch(`${ML_API}/items/${mlItemId}`);
+      itemRes = await fetch(`${ML_API}/items/${mlItemId}`, { headers: mlHeaders(token) });
     } catch (err: any) {
       return reply.status(502).send({ error: `Sem acesso à ML API: ${err?.message ?? err}` });
     }
