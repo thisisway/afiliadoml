@@ -21,7 +21,7 @@ async function request<T>(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: "Erro desconhecido" }));
-    throw new Error(err.message ?? "Erro na requisição");
+    throw new Error(err.message ?? err.error ?? "Erro na requisição");
   }
 
   return res.json() as Promise<T>;

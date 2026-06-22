@@ -69,7 +69,7 @@ app.get("/health/ml", async (_req, reply) => {
   try {
     const [siteRes, searchRes] = await Promise.all([
       fetch("https://api.mercadolibre.com/sites/MLB", { headers: mlHeaders(token) }),
-      fetch("https://api.mercadolibre.com/sites/MLB/search?q=adidas&limit=1", { headers: mlHeaders(token) }),
+      fetch("https://api.mercadolibre.com/sites/MLB/search?q=adidas&limit=1"),
     ]);
     const siteJson = await siteRes.json() as any;
     const searchJson = await searchRes.json() as any;

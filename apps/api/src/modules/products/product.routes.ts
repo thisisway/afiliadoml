@@ -32,9 +32,15 @@ export async function productRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "Parâmetro 'q' obrigatório (mín. 2 chars)" });
       }
 
-      const token = await getMLToken();
       const url = `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${limit}`;
-      const res = await fetch(url, { headers: mlHeaders(token) });
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 8000);
+      let res: Response;
+      try {
+        res = await fetch(url, { signal: controller.signal });
+      } finally {
+        clearTimeout(tid);
+      }
 
       if (!res.ok) {
         return reply.status(502).send({ error: `ML API retornou ${res.status}` });
@@ -78,10 +84,14 @@ export async function productRoutes(app: FastifyInstance) {
 
     const token = await getMLToken();
     let itemRes: Response;
+    const importCtrl = new AbortController();
+    const importTid = setTimeout(() => importCtrl.abort(), 8000);
     try {
-      itemRes = await fetch(`${ML_API}/items/${mlItemId}`, { headers: mlHeaders(token) });
+      itemRes = await fetch(`${ML_API}/items/${mlItemId}`, { headers: mlHeaders(token), signal: importCtrl.signal });
     } catch (err: any) {
       return reply.status(502).send({ error: `Sem acesso à ML API: ${err?.message ?? err}` });
+    } finally {
+      clearTimeout(importTid);
     }
     if (!itemRes.ok) {
       return reply.status(404).send({ error: "Item não encontrado no Mercado Livre" });
