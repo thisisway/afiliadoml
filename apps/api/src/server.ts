@@ -62,20 +62,22 @@ await app.register(settingRoutes, { prefix: "/settings" });
 // Health check
 app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
 
-// Connectivity test — checks if container can reach ML API (with token if configured)
+// Connectivity test — checks ML API site + search with token
 app.get("/health/ml", async (_req, reply) => {
   const { getMLToken, mlHeaders } = await import("./lib/ml-auth.js");
   const token = await getMLToken();
   try {
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 8_000);
-    const res = await fetch("https://api.mercadolibre.com/sites/MLB", {
-      signal: controller.signal,
-      headers: mlHeaders(token),
+    const [siteRes, searchRes] = await Promise.all([
+      fetch("https://api.mercadolibre.com/sites/MLB", { headers: mlHeaders(token) }),
+      fetch("https://api.mercadolibre.com/sites/MLB/search?q=adidas&limit=1", { headers: mlHeaders(token) }),
+    ]);
+    const siteJson = await siteRes.json() as any;
+    const searchJson = await searchRes.json() as any;
+    return reply.send({
+      authenticated: !!token,
+      site: { ok: siteRes.ok, status: siteRes.status, id: siteJson?.id ?? null },
+      search: { ok: searchRes.ok, status: searchRes.status, total: searchJson?.paging?.total ?? searchJson?.error ?? null },
     });
-    clearTimeout(tid);
-    const json = await res.json();
-    return reply.send({ ok: res.ok, status: res.status, site: (json as any)?.id ?? null, authenticated: !!token });
   } catch (err: any) {
     return reply.status(502).send({ ok: false, error: err?.message ?? String(err) });
   }

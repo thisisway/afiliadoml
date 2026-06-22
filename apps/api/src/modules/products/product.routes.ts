@@ -26,50 +26,46 @@ export async function productRoutes(app: FastifyInstance) {
   // ── Mercado Livre integration ──────────────────────────────────────────────
 
   app.get("/ml/search", { ...authenticate }, async (request, reply) => {
-    const { q, limit = "10" } = request.query as { q?: string; limit?: string };
-    if (!q || q.trim().length < 2) {
-      return reply.status(400).send({ error: "Parâmetro 'q' obrigatório (mín. 2 chars)" });
-    }
-    const url = `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${limit}`;
-
-    const token = await getMLToken();
-    let res: Response;
     try {
-      const controller = new AbortController();
-      const tid = setTimeout(() => controller.abort(), 10_000);
-      res = await fetch(url, { signal: controller.signal, headers: mlHeaders(token) });
-      clearTimeout(tid);
+      const { q, limit = "10" } = request.query as { q?: string; limit?: string };
+      if (!q || q.trim().length < 2) {
+        return reply.status(400).send({ error: "Parâmetro 'q' obrigatório (mín. 2 chars)" });
+      }
+
+      const token = await getMLToken();
+      const url = `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${limit}`;
+      const res = await fetch(url, { headers: mlHeaders(token) });
+
+      if (!res.ok) {
+        return reply.status(502).send({ error: `ML API retornou ${res.status}` });
+      }
+
+      const json = await res.json() as any;
+      const items = (json.results ?? []).map((item: any) => ({
+        mlItemId:       item.id,
+        title:          item.title,
+        price:          item.price,
+        originalPrice:  item.original_price ?? null,
+        thumbnail:      item.thumbnail?.replace(/\-I\.jpg$/, "-O.jpg") ?? item.thumbnail,
+        permalink:      item.permalink,
+        condition:      item.condition,
+        soldQuantity:   item.sold_quantity,
+        sellerName:     item.seller?.nickname ?? null,
+        alreadyImported: false,
+      }));
+
+      const ids = items.map((i: any) => i.mlItemId);
+      const existing = await prisma.product.findMany({
+        where: { externalId: { in: ids } },
+        select: { externalId: true },
+      });
+      const existingSet = new Set(existing.map((p: any) => p.externalId));
+      items.forEach((i: any) => { i.alreadyImported = existingSet.has(i.mlItemId); });
+
+      return reply.send({ data: items, total: json.paging?.total ?? 0 });
     } catch (err: any) {
-      return reply.status(502).send({ error: `Sem acesso à ML API: ${err?.message ?? err}` });
+      return reply.status(500).send({ error: `Erro na busca ML: ${err?.message ?? String(err)}` });
     }
-
-    if (!res.ok) {
-      return reply.status(502).send({ error: `ML API retornou ${res.status}` });
-    }
-    const json = await res.json() as any;
-    const items = (json.results ?? []).map((item: any) => ({
-      mlItemId:       item.id,
-      title:          item.title,
-      price:          item.price,
-      originalPrice:  item.original_price ?? null,
-      thumbnail:      item.thumbnail?.replace(/\-I\.jpg$/, "-O.jpg") ?? item.thumbnail,
-      permalink:      item.permalink,
-      condition:      item.condition,
-      soldQuantity:   item.sold_quantity,
-      sellerName:     item.seller?.nickname ?? null,
-      alreadyImported: false,
-    }));
-
-    // mark which ones are already in DB
-    const ids = items.map((i: any) => i.mlItemId);
-    const existing = await prisma.product.findMany({
-      where: { externalId: { in: ids } },
-      select: { externalId: true },
-    });
-    const existingSet = new Set(existing.map((p: any) => p.externalId));
-    items.forEach((i: any) => { i.alreadyImported = existingSet.has(i.mlItemId); });
-
-    return reply.send({ data: items, total: json.paging?.total ?? 0 });
   });
 
   app.post("/ml/import", { ...authenticate }, async (request, reply) => {
