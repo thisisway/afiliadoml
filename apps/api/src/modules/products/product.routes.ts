@@ -30,9 +30,19 @@ export async function productRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "Parâmetro 'q' obrigatório (mín. 2 chars)" });
     }
     const url = `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${limit}`;
-    const res = await fetch(url);
+
+    let res: Response;
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 10_000);
+      res = await fetch(url, { signal: controller.signal });
+      clearTimeout(tid);
+    } catch (err: any) {
+      return reply.status(502).send({ error: `Sem acesso à ML API: ${err?.message ?? err}` });
+    }
+
     if (!res.ok) {
-      return reply.status(502).send({ error: "Erro ao buscar no Mercado Livre" });
+      return reply.status(502).send({ error: `ML API retornou ${res.status}` });
     }
     const json = await res.json() as any;
     const items = (json.results ?? []).map((item: any) => ({
@@ -68,7 +78,12 @@ export async function productRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: "Produto já importado", data: existing });
     }
 
-    const itemRes = await fetch(`${ML_API}/items/${mlItemId}`);
+    let itemRes: Response;
+    try {
+      itemRes = await fetch(`${ML_API}/items/${mlItemId}`);
+    } catch (err: any) {
+      return reply.status(502).send({ error: `Sem acesso à ML API: ${err?.message ?? err}` });
+    }
     if (!itemRes.ok) {
       return reply.status(404).send({ error: "Item não encontrado no Mercado Livre" });
     }
