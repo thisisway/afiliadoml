@@ -52,7 +52,10 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
         headers: { authorization: `Bearer ${token}` },
       });
       const json = await res.json().catch(() => null);
-      if (!json || json.error) throw new Error(json?.error ?? "Erro ao buscar produtos");
+      if (!json || json.error) {
+        const msg = json?.detail ? `${json.error} — ${json.detail}` : (json?.error ?? "Erro ao buscar produtos");
+        throw new Error(msg);
+      }
       return json as { data: any[]; total: number };
     },
     enabled: searched.length >= 2,

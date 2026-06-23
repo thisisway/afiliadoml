@@ -36,10 +36,11 @@ export async function GET(request: NextRequest) {
     const json = await res.json().catch(() => null);
 
     if (!res.ok) {
-      // Return 200 — EasyPanel nginx intercepts 5xx and replaces JSON body with HTML
+      // Return 200 — EasyPanel nginx intercepts 5xx and replaces JSON body with HTML.
+      // Spread full Fastify error (includes 'detail' from ML API response body).
       return NextResponse.json({
+        ...(json ?? {}),
         error: json?.error ?? `API retornou ${res.status}`,
-        _debug: { status: res.status, target },
       });
     }
 

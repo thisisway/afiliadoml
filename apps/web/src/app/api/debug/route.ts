@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-// Diagnostic endpoint — shows which API URL is configured and whether it's reachable.
+// Diagnostic endpoint — shows API URL, connectivity, and ML token status.
 // Access: GET /api/debug
 export async function GET() {
   const apiUrl =
@@ -11,6 +11,8 @@ export async function GET() {
   let reachable = false;
   let healthData: unknown = null;
   let reachError: string | null = null;
+  let mlHealth: unknown = null;
+  let mlError: string | null = null;
 
   try {
     const res = await fetch(`${apiUrl}/health`, { signal: AbortSignal.timeout(5000) });
@@ -18,6 +20,15 @@ export async function GET() {
     healthData = await res.json().catch(() => null);
   } catch (err: any) {
     reachError = err?.message ?? String(err);
+  }
+
+  if (reachable) {
+    try {
+      const res = await fetch(`${apiUrl}/health/ml`, { signal: AbortSignal.timeout(10000) });
+      mlHealth = await res.json().catch(() => null);
+    } catch (err: any) {
+      mlError = err?.message ?? String(err);
+    }
   }
 
   return NextResponse.json({
@@ -29,5 +40,7 @@ export async function GET() {
     apiReachable: reachable,
     healthData,
     reachError,
+    mlHealth,
+    mlError,
   });
 }
