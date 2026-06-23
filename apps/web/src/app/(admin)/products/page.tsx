@@ -33,13 +33,27 @@ const MARKETPLACE_LABELS: Record<string, string> = {
 
 // ── ML Import Modal ──────────────────────────────────────────────────────────
 
+// Extracts the ML item ID (e.g. MLB1234567890) from a product URL or raw ID string.
+function extractMLItemId(input: string): string | null {
+  const trimmed = input.trim();
+  // Direct ID
+  if (/^MLB\d+$/i.test(trimmed)) return trimmed.toUpperCase();
+  // From URL: /MLB1234567890- or ?id=MLB...
+  const match = trimmed.match(/MLB\d+/i);
+  return match ? match[0].toUpperCase() : null;
+}
+
 function ImportMLModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
+  const [tab, setTab] = useState<"search" | "url">("url");
   const [query, setQuery] = useState("");
   const [searched, setSearched] = useState("");
   const [minDiscount, setMinDiscount] = useState("");
   const [importing, setImporting] = useState<Set<string>>(new Set());
   const [imported, setImported] = useState<Set<string>>(new Set());
+  const [urlInput, setUrlInput] = useState("");
+  const [urlStatus, setUrlStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [urlError, setUrlError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data, isFetching, isError, error } = useQuery({
@@ -64,6 +78,26 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
 
   function handleSearch() {
     if (query.trim().length >= 2) setSearched(query.trim());
+  }
+
+  async function handleImportByUrl() {
+    const itemId = extractMLItemId(urlInput);
+    if (!itemId) {
+      setUrlError("URL ou ID inválido. Ex: MLB1234567890 ou https://produto.mercadolivre.com.br/MLB...");
+      return;
+    }
+    setUrlStatus("loading");
+    setUrlError("");
+    try {
+      await api.post("/products/ml/import", { mlItemId: itemId });
+      setUrlStatus("success");
+      qc.invalidateQueries({ queryKey: ["products"] });
+      setUrlInput("");
+    } catch (err: any) {
+      setUrlStatus("error");
+      setUrlError(err.message?.includes("já importado") ? "Produto já importado." : (err.message ?? "Erro ao importar"));
+      if (err.message?.includes("já importado")) setUrlStatus("idle");
+    }
   }
 
   async function handleImport(item: any) {
@@ -111,8 +145,62 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Search + filters */}
-        <div className="px-6 py-4 border-b border-basic-200 space-y-3">
+        {/* Tabs */}
+        <div className="flex border-b border-basic-200">
+          {(["url", "search"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-5 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                tab === t
+                  ? "border-primary-500 text-primary-600"
+                  : "border-transparent text-basic-500 hover:text-basic-700"
+              }`}
+            >
+              {t === "url" ? "Importar por URL / ID" : "Buscar produtos"}
+            </button>
+          ))}
+        </div>
+
+        {/* URL import tab */}
+        {tab === "url" && (
+          <div className="px-6 py-5 space-y-3">
+            <p className="text-xs text-basic-500">
+              Abra o <a href="https://www.mercadolivre.com.br" target="_blank" rel="noopener noreferrer" className="text-warning-600 hover:underline font-medium">Mercado Livre</a>,
+              encontre o produto desejado e cole a URL ou o código (MLB...) abaixo.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={urlInput}
+                onChange={(e) => { setUrlInput(e.target.value); setUrlStatus("idle"); setUrlError(""); }}
+                onKeyDown={(e) => e.key === "Enter" && handleImportByUrl()}
+                placeholder="Ex: https://produto.mercadolivre.com.br/MLB-... ou MLB1234567890"
+                className="input flex-1 text-sm font-mono"
+                autoFocus
+              />
+              <Button
+                onClick={handleImportByUrl}
+                disabled={!urlInput.trim() || urlStatus === "loading"}
+                loading={urlStatus === "loading"}
+                variant="primary"
+                size="md"
+              >
+                <Download size={14} />
+                Importar
+              </Button>
+            </div>
+            {urlError && <p className="text-xs text-danger-600">{urlError}</p>}
+            {urlStatus === "success" && (
+              <p className="text-xs text-success-600 font-medium flex items-center gap-1">
+                <Check size={13} /> Produto importado com sucesso!
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Search + filters tab */}
+        {tab === "search" && <div className="px-6 py-4 border-b border-basic-200 space-y-3">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-basic-400" />
@@ -172,10 +260,10 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
               )}
             </div>
           )}
-        </div>
+        </div>}
 
-        {/* Results */}
-        <div className="overflow-y-auto flex-1 p-4">
+        {/* Search results */}
+        {tab === "search" && <div className="overflow-y-auto flex-1 p-4">
           {isFetching && (
             <div className="flex items-center justify-center gap-2 py-12 text-basic-500 text-sm">
               <Loader2 size={16} className="animate-spin" />
@@ -265,7 +353,7 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
               })}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-basic-200 flex items-center justify-between">
