@@ -1,3 +1,5 @@
+import { prisma } from "./prisma.js";
+
 const ML_OAUTH = "https://api.mercadolibre.com/oauth/token";
 
 interface TokenCache {
@@ -7,12 +9,33 @@ interface TokenCache {
 
 let cache: TokenCache | null = null;
 
-export async function getMLToken(): Promise<string | null> {
-  const appId = process.env.ML_APP_ID;
-  const secret = process.env.ML_SECRET_KEY;
-  if (!appId || !secret) return null;
+async function getCredentials(): Promise<{ appId: string; secret: string } | null> {
+  // Prefer environment variables
+  const envAppId = process.env.ML_APP_ID;
+  const envSecret = process.env.ML_SECRET_KEY;
+  if (envAppId && envSecret) return { appId: envAppId, secret: envSecret };
 
+  // Fall back to database settings
+  try {
+    const [appIdSetting, secretSetting] = await Promise.all([
+      prisma.setting.findUnique({ where: { key: "ml_app_id" } }),
+      prisma.setting.findUnique({ where: { key: "ml_secret_key" } }),
+    ]);
+    if (appIdSetting?.value && secretSetting?.value) {
+      return { appId: appIdSetting.value, secret: secretSetting.value };
+    }
+  } catch {
+    // ignore DB errors
+  }
+
+  return null;
+}
+
+export async function getMLToken(): Promise<string | null> {
   if (cache && Date.now() < cache.expires_at) return cache.access_token;
+
+  const creds = await getCredentials();
+  if (!creds) return null;
 
   try {
     const res = await fetch(ML_OAUTH, {
@@ -20,8 +43,8 @@ export async function getMLToken(): Promise<string | null> {
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: new URLSearchParams({
         grant_type: "client_credentials",
-        client_id: appId,
-        client_secret: secret,
+        client_id: creds.appId,
+        client_secret: creds.secret,
       }).toString(),
     });
     if (!res.ok) return null;
@@ -38,4 +61,9 @@ export async function getMLToken(): Promise<string | null> {
 
 export function mlHeaders(token: string | null): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// Invalidate cache when credentials change
+export function invalidateMLTokenCache() {
+  cache = null;
 }

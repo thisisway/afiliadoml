@@ -10,7 +10,9 @@ const FASTIFY_URL =
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q") ?? "";
-  const limit = searchParams.get("limit") ?? "12";
+  const limit = Number(searchParams.get("limit") ?? "12");
+  const minDiscount = Number(searchParams.get("min_discount") ?? "0");
+  const category = searchParams.get("category") ?? "";
   const authorization = request.headers.get("authorization") ?? "";
 
   if (q.trim().length < 2) {
@@ -21,16 +23,19 @@ export async function GET(request: NextRequest) {
   const tid = setTimeout(() => controller.abort(), 10000);
 
   try {
-    // Call ML API server-side (no Origin header = no CORS block, no auth needed)
+    // Fetch more items from ML when discount filter is active so we have enough after filtering
+    const fetchLimit = minDiscount > 0 ? Math.min(limit * 4, 50) : limit;
+
+    let mlUrl = `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${fetchLimit}`;
+    if (category) mlUrl += `&category=${encodeURIComponent(category)}`;
+
     const [mlRes, productsRes] = await Promise.all([
-      fetch(
-        `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${limit}`,
-        { signal: controller.signal }
-      ),
+      fetch(mlUrl, { signal: controller.signal }),
+      // Try to get already-imported products — gracefully ignore if Fastify is unreachable
       fetch(`${FASTIFY_URL}/products?limit=500`, {
         headers: { authorization },
         signal: controller.signal,
-      }),
+      }).catch(() => null),
     ]);
 
     if (!mlRes.ok) {
@@ -44,27 +49,44 @@ export async function GET(request: NextRequest) {
     const mlJson = (await mlRes.json()) as any;
 
     let importedIds = new Set<string>();
-    if (productsRes.ok) {
+    if (productsRes?.ok) {
       const productsJson = (await productsRes.json()) as any;
       importedIds = new Set(
-        (productsJson.data ?? [])
-          .map((p: any) => p.externalId)
-          .filter(Boolean)
+        (productsJson.data ?? []).map((p: any) => p.externalId).filter(Boolean)
       );
     }
 
-    const items = (mlJson.results ?? []).map((item: any) => ({
-      mlItemId:        item.id,
-      title:           item.title,
-      price:           item.price,
-      originalPrice:   item.original_price ?? null,
-      thumbnail:       item.thumbnail?.replace(/-I\.jpg$/, "-O.jpg") ?? item.thumbnail,
-      permalink:       item.permalink,
-      condition:       item.condition,
-      soldQuantity:    item.sold_quantity,
-      sellerName:      item.seller?.nickname ?? null,
-      alreadyImported: importedIds.has(item.id),
-    }));
+    let results: any[] = mlJson.results ?? [];
+
+    // Apply min_discount filter
+    if (minDiscount > 0) {
+      results = results.filter((item: any) => {
+        if (!item.original_price || !item.price) return false;
+        const pct = Math.round((1 - item.price / item.original_price) * 100);
+        return pct >= minDiscount;
+      });
+    }
+
+    const items = results.slice(0, limit).map((item: any) => {
+      const discountPercent =
+        item.original_price && item.price < item.original_price
+          ? Math.round((1 - item.price / item.original_price) * 100)
+          : null;
+      return {
+        mlItemId:        item.id,
+        title:           item.title,
+        price:           item.price,
+        originalPrice:   item.original_price ?? null,
+        discountPercent,
+        freeShipping:    item.shipping?.free_shipping ?? false,
+        thumbnail:       item.thumbnail?.replace(/-I\.jpg$/, "-O.jpg") ?? item.thumbnail,
+        permalink:       item.permalink,
+        condition:       item.condition,
+        soldQuantity:    item.sold_quantity ?? null,
+        sellerName:      item.seller?.nickname ?? null,
+        alreadyImported: importedIds.has(item.id),
+      };
+    });
 
     return NextResponse.json({ data: items, total: mlJson.paging?.total ?? 0 });
   } catch (err: any) {
