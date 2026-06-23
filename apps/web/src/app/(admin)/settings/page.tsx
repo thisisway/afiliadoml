@@ -2,8 +2,9 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { useState, useEffect } from "react";
-import { Check, ExternalLink, Key, AlertTriangle, Eye, EyeOff } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Check, ExternalLink, Key, AlertTriangle, Eye, EyeOff, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -105,9 +106,18 @@ function SecretField({
 }
 
 export default function SettingsPage() {
+  const qc = useQueryClient();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const { data } = useQuery({
     queryKey: ["settings"],
     queryFn: () => api.get<{ data: Record<string, string> }>("/settings"),
+  });
+
+  const { data: mlConnected, refetch: refetchConnected } = useQuery({
+    queryKey: ["ml-connected"],
+    queryFn: () => api.get<{ connected: boolean }>("/settings/ml/connected"),
   });
 
   const settings = data?.data;
@@ -118,6 +128,32 @@ export default function SettingsPage() {
   const openaiKey   = useSetting("openai_api_key",  settings);
 
   const hasMLCreds = !!(settings?.ml_app_id && settings?.ml_secret_key);
+  const isMLConnected = mlConnected?.connected ?? false;
+
+  // Handle ML OAuth callback — ML redirects back with ?code=...
+  const [oauthStatus, setOauthStatus] = useState<"idle" | "exchanging" | "success" | "error">("idle");
+
+  useEffect(() => {
+    const code = searchParams.get("code");
+    if (!code || oauthStatus !== "idle") return;
+
+    setOauthStatus("exchanging");
+    const redirectUri = `${window.location.origin}/settings`;
+    api.post("/settings/ml/exchange", { code, redirect_uri: redirectUri })
+      .then(() => {
+        setOauthStatus("success");
+        refetchConnected();
+        // Remove code from URL without reload
+        router.replace("/settings");
+      })
+      .catch(() => setOauthStatus("error"));
+  }, [searchParams, oauthStatus, refetchConnected, router]);
+
+  async function handleConnectML() {
+    const redirectUri = `${window.location.origin}/settings`;
+    const res = await api.get<{ url: string }>(`/settings/ml/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}`);
+    window.location.href = res.url;
+  }
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -159,10 +195,49 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {hasMLCreds && (
+        {/* OAuth callback status */}
+        {oauthStatus === "exchanging" && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-info-50 border border-info-200 mb-4">
+            <Loader2 size={14} className="text-info-600 animate-spin" />
+            <p className="text-xs font-medium text-info-700">Conectando conta Mercado Livre...</p>
+          </div>
+        )}
+        {oauthStatus === "success" && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-success-50 border border-success-200 mb-4">
             <Check size={14} className="text-success-600" />
-            <p className="text-xs font-medium text-success-700">API configurada — busca de produtos ativa</p>
+            <p className="text-xs font-medium text-success-700">Conta ML conectada com sucesso! Busca de produtos ativa.</p>
+          </div>
+        )}
+        {oauthStatus === "error" && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-danger-50 border border-danger-200 mb-4">
+            <AlertTriangle size={14} className="text-danger-600" />
+            <p className="text-xs font-medium text-danger-700">Erro ao conectar. Tente novamente.</p>
+          </div>
+        )}
+
+        {hasMLCreds && isMLConnected && (
+          <div className="flex items-center justify-between p-3 rounded-lg bg-success-50 border border-success-200 mb-4">
+            <div className="flex items-center gap-2">
+              <Check size={14} className="text-success-600" />
+              <p className="text-xs font-medium text-success-700">Conta ML conectada — busca de produtos ativa</p>
+            </div>
+            <Button size="xs" variant="ghost" onClick={handleConnectML}>Reconectar</Button>
+          </div>
+        )}
+
+        {hasMLCreds && !isMLConnected && oauthStatus === "idle" && (
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-warning-50 border border-warning-200 mb-4">
+            <AlertTriangle size={15} className="text-warning-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-xs font-medium text-warning-700">Conta ML não conectada</p>
+              <p className="text-xs text-warning-600 mt-0.5">
+                É necessário conectar sua conta ML para que a busca funcione de qualquer servidor.
+              </p>
+            </div>
+            <Button size="sm" variant="warning" onClick={handleConnectML}>
+              <Link2 size={13} />
+              Conectar conta ML
+            </Button>
           </div>
         )}
 
