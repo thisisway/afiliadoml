@@ -73,9 +73,12 @@ app.get("/health/ml", async (_req, reply) => {
     ...(t ? { Authorization: `Bearer ${t}` } : {}),
   });
   try {
+    const tokenQs = token ? `&access_token=${encodeURIComponent(token)}` : "";
     const [siteRes, searchRes] = await Promise.all([
-      fetch("https://api.mercadolibre.com/sites/MLB", { headers: headers(token) }),
-      fetch("https://api.mercadolibre.com/sites/MLB/search?q=adidas&limit=1", { headers: headers(token) }),
+      fetch(`https://api.mercadolibre.com/sites/MLB`, { headers: headers(token) }),
+      fetch(`https://api.mercadolibre.com/sites/MLB/search?q=adidas&limit=1${tokenQs}`, {
+        headers: { "User-Agent": UA, "Accept": "application/json" },
+      }),
     ]);
     const siteJson = await siteRes.json() as any;
     const searchJson = await searchRes.json() as any;

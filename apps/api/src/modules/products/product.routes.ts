@@ -92,8 +92,16 @@ export async function productRoutes(app: FastifyInstance) {
       const fetchLimit = min_discount ? Math.min(Number(limit) * 4, 50) : Math.min(Number(limit), 50);
       let searchUrl = `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${fetchLimit}`;
       if (category) searchUrl += `&category=${encodeURIComponent(category)}`;
+      // Pass token as query param — some ML endpoints reject the Authorization header
+      // but accept access_token as a URL parameter.
+      if (token) searchUrl += `&access_token=${encodeURIComponent(token)}`;
 
-      const res = await fetchWithTimeout(searchUrl, { headers: mlFetchHeaders(token) });
+      const res = await fetchWithTimeout(searchUrl, {
+        headers: {
+          "User-Agent": ML_USER_AGENT,
+          "Accept": "application/json",
+        },
+      });
 
       if (!res.ok) {
         const body = await res.text().catch(() => "");
