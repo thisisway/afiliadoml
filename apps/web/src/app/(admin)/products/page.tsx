@@ -46,17 +46,64 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
     queryKey: ["ml-search", searched, minDiscount],
     queryFn: async () => {
       const token = localStorage.getItem("token") ?? "";
-      const params = new URLSearchParams({ q: searched, limit: "12" });
-      if (minDiscount) params.set("min_discount", minDiscount);
-      const res = await fetch(`/api/ml/search?${params}`, {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      const json = await res.json().catch(() => null);
-      if (!json || json.error) {
-        const msg = json?.detail ? `${json.error} — ${json.detail}` : (json?.error ?? "Erro ao buscar produtos");
-        throw new Error(msg);
+
+      // Search directly from the browser → api.mercadolibre.com (avoids server-side geo-block).
+      // ML allows CORS for browser requests to the public search endpoint.
+      const mlParams = new URLSearchParams({ q: searched, limit: "50" });
+      const mlRes = await fetch(
+        `https://api.mercadolibre.com/sites/MLB/search?${mlParams}`,
+        { headers: { Accept: "application/json" } }
+      );
+      if (!mlRes.ok) {
+        const body = await mlRes.json().catch(() => null);
+        throw new Error(body?.message ?? `ML retornou ${mlRes.status}`);
       }
-      return json as { data: any[]; total: number };
+      const mlJson = await mlRes.json();
+      let results: any[] = mlJson.results ?? [];
+
+      // Apply client-side discount filter
+      if (minDiscount) {
+        const minPct = Number(minDiscount);
+        results = results.filter((item: any) => {
+          if (!item.original_price || !item.price) return false;
+          return Math.round((1 - item.price / item.original_price) * 100) >= minPct;
+        });
+      }
+
+      const items = results.slice(0, 12).map((item: any) => {
+        const discount =
+          item.original_price && item.price < item.original_price
+            ? Math.round((1 - item.price / item.original_price) * 100)
+            : null;
+        return {
+          mlItemId:        item.id,
+          title:           item.title,
+          price:           item.price,
+          originalPrice:   item.original_price ?? null,
+          discountPercent: discount,
+          thumbnail:       item.thumbnail?.replace(/-I\.jpg$/, "-O.jpg") ?? item.thumbnail,
+          permalink:       item.permalink,
+          condition:       item.condition,
+          soldQuantity:    item.sold_quantity ?? null,
+          freeShipping:    item.shipping?.free_shipping ?? false,
+          sellerName:      item.seller?.nickname ?? null,
+          alreadyImported: false,
+        };
+      });
+
+      // Check which items are already in our DB (calls Fastify API directly — CORS is allowed)
+      if (items.length > 0) {
+        const ids = items.map((i: any) => i.mlItemId).join(",");
+        try {
+          const checkJson = await api.get<{ data: string[] }>(`/products/ml/imported?ids=${ids}`);
+          const importedSet = new Set<string>(checkJson?.data ?? []);
+          items.forEach((i: any) => { i.alreadyImported = importedSet.has(i.mlItemId); });
+        } catch {
+          // non-critical: if check fails, just show items as not imported
+        }
+      }
+
+      return { data: items, total: mlJson.paging?.total ?? 0 };
     },
     enabled: searched.length >= 2,
     retry: 1,

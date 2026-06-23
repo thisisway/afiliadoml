@@ -56,6 +56,20 @@ export async function productRoutes(app: FastifyInstance) {
 
   // ── Mercado Livre integration ──────────────────────────────────────────────
 
+  // Returns which of the given ML item IDs are already imported in the database.
+  // Called by the browser after fetching ML search results directly from api.mercadolibre.com.
+  app.get("/ml/imported", { ...authenticate }, async (request, reply) => {
+    const { ids } = request.query as { ids?: string };
+    if (!ids) return reply.send({ data: [] });
+    const idList = ids.split(",").map((s) => s.trim()).filter(Boolean);
+    if (idList.length === 0) return reply.send({ data: [] });
+    const existing = await prisma.product.findMany({
+      where: { externalId: { in: idList } },
+      select: { externalId: true },
+    });
+    return reply.send({ data: existing.map((p) => p.externalId) });
+  });
+
   app.get("/ml/search", { ...authenticate }, async (request, reply) => {
     try {
       const {
