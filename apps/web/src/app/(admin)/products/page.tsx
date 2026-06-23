@@ -44,10 +44,16 @@ function ImportMLModal({ onClose }: { onClose: () => void }) {
 
   const { data, isFetching, isError, error } = useQuery({
     queryKey: ["ml-search", searched, minDiscount],
-    queryFn: () => {
+    queryFn: async () => {
+      const token = localStorage.getItem("token") ?? "";
       const params = new URLSearchParams({ q: searched, limit: "12" });
       if (minDiscount) params.set("min_discount", minDiscount);
-      return api.get<{ data: any[]; total: number }>(`/products/ml/search?${params}`);
+      const res = await fetch(`/api/ml/search?${params}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json) throw new Error(json?.error ?? `Erro ${res.status}`);
+      return json as { data: any[]; total: number };
     },
     enabled: searched.length >= 2,
     retry: 1,

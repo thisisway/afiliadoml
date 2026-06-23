@@ -9,17 +9,14 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 
 const MASKED = "••••••••";
 
-function useSetting(key: string, settings: Record<string, string> | undefined, sensitive = false) {
+function useSetting(key: string, settings: Record<string, string> | undefined) {
   const qc = useQueryClient();
   const [value, setValue] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (settings?.[key] !== undefined) {
-      // Don't pre-fill sensitive fields with the masked placeholder — keep blank so user types real value
-      setValue(sensitive ? "" : settings[key]);
-    }
-  }, [settings, key, sensitive]);
+    if (settings?.[key] !== undefined) setValue(settings[key]);
+  }, [settings, key]);
 
   const mutation = useMutation({
     mutationFn: (val: string) => api.patch(`/settings/${key}`, { value: val }),
@@ -30,7 +27,15 @@ function useSetting(key: string, settings: Record<string, string> | undefined, s
     },
   });
 
-  return { value, setValue, saved, save: () => mutation.mutate(value), isPending: mutation.isPending };
+  // Skip save if value hasn't changed from the masked placeholder
+  const save = () => {
+    if (!value.trim() || value === MASKED) return;
+    mutation.mutate(value);
+  };
+
+  const isConfigured = value === MASKED;
+
+  return { value, setValue, saved, save, isPending: mutation.isPending, isConfigured };
 }
 
 function SecretField({
@@ -38,6 +43,7 @@ function SecretField({
   hint,
   placeholder,
   value,
+  isConfigured,
   onChange,
   onSave,
   isPending,
@@ -47,23 +53,33 @@ function SecretField({
   hint?: string;
   placeholder: string;
   value: string;
+  isConfigured: boolean;
   onChange: (v: string) => void;
   onSave: () => void;
   isPending: boolean;
   saved: boolean;
 }) {
   const [show, setShow] = useState(false);
+  const hasChange = value.trim() !== "" && value !== MASKED;
+
   return (
     <div>
-      <label className="block text-xs font-medium text-basic-600 mb-1.5">{label}</label>
+      <div className="flex items-center gap-2 mb-1.5">
+        <label className="text-xs font-medium text-basic-600">{label}</label>
+        {isConfigured && !hasChange && (
+          <span className="flex items-center gap-1 text-xs text-success-600 font-medium">
+            <Check size={11} /> Configurada
+          </span>
+        )}
+      </div>
       {hint && <p className="text-xs text-basic-400 mb-1.5">{hint}</p>}
       <div className="flex gap-2">
         <div className="relative flex-1">
           <input
             type={show ? "text" : "password"}
-            value={value}
+            value={isConfigured && !hasChange ? "" : value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={placeholder}
+            placeholder={isConfigured ? "Preencha apenas para alterar" : placeholder}
             className="input pr-9 text-sm font-mono"
           />
           <button
@@ -76,7 +92,7 @@ function SecretField({
         </div>
         <Button
           onClick={onSave}
-          disabled={!value.trim() || isPending}
+          disabled={!hasChange || isPending}
           loading={isPending}
           size="sm"
           variant={saved ? "success" : "primary"}
@@ -96,10 +112,10 @@ export default function SettingsPage() {
 
   const settings = data?.data;
 
-  const affiliateId = useSetting("ml_affiliate_id", settings, false);
-  const appId       = useSetting("ml_app_id",       settings, false);
-  const secretKey   = useSetting("ml_secret_key",   settings, true);
-  const openaiKey   = useSetting("openai_api_key",  settings, true);
+  const affiliateId = useSetting("ml_affiliate_id", settings);
+  const appId       = useSetting("ml_app_id",       settings);
+  const secretKey   = useSetting("ml_secret_key",   settings);
+  const openaiKey   = useSetting("openai_api_key",  settings);
 
   const hasMLCreds = !!(settings?.ml_app_id && settings?.ml_secret_key);
 
@@ -156,6 +172,7 @@ export default function SettingsPage() {
             hint="Número gerado ao criar o app no portal de desenvolvedores."
             placeholder="Ex: 123456789"
             value={appId.value}
+            isConfigured={appId.isConfigured}
             onChange={appId.setValue}
             onSave={appId.save}
             isPending={appId.isPending}
@@ -166,6 +183,7 @@ export default function SettingsPage() {
             hint="Chave secreta do app. Nunca compartilhe."
             placeholder="Ex: AbCdEfGhIj..."
             value={secretKey.value}
+            isConfigured={secretKey.isConfigured}
             onChange={secretKey.setValue}
             onSave={secretKey.save}
             isPending={secretKey.isPending}
@@ -247,7 +265,7 @@ export default function SettingsPage() {
           </a>
         </CardHeader>
 
-        {settings?.openai_api_key && settings.openai_api_key !== MASKED ? (
+        {openaiKey.isConfigured ? (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-success-50 border border-success-200 mb-4">
             <Check size={14} className="text-success-600" />
             <p className="text-xs font-medium text-success-700">Chave configurada — geração de copy ativa</p>
@@ -265,6 +283,7 @@ export default function SettingsPage() {
           label="API Key"
           placeholder="sk-..."
           value={openaiKey.value}
+          isConfigured={openaiKey.isConfigured}
           onChange={openaiKey.setValue}
           onSave={openaiKey.save}
           isPending={openaiKey.isPending}
