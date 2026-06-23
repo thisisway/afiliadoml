@@ -64,19 +64,32 @@ app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOStrin
 
 // Connectivity test — checks ML API site + search with token
 app.get("/health/ml", async (_req, reply) => {
-  const { getMLToken, mlHeaders } = await import("./lib/ml-auth.js");
+  const { getMLToken } = await import("./lib/ml-auth.js");
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
   const token = await getMLToken();
+  const headers = (t: string | null) => ({
+    "User-Agent": UA,
+    "Accept": "application/json",
+    ...(t ? { Authorization: `Bearer ${t}` } : {}),
+  });
   try {
     const [siteRes, searchRes] = await Promise.all([
-      fetch("https://api.mercadolibre.com/sites/MLB", { headers: mlHeaders(token) }),
-      fetch("https://api.mercadolibre.com/sites/MLB/search?q=adidas&limit=1", { headers: mlHeaders(token) }),
+      fetch("https://api.mercadolibre.com/sites/MLB", { headers: headers(token) }),
+      fetch("https://api.mercadolibre.com/sites/MLB/search?q=adidas&limit=1", { headers: headers(token) }),
     ]);
     const siteJson = await siteRes.json() as any;
     const searchJson = await searchRes.json() as any;
     return reply.send({
       authenticated: !!token,
+      tokenPrefix: token ? token.slice(0, 12) + "…" : null,
       site: { ok: siteRes.ok, status: siteRes.status, id: siteJson?.id ?? null },
-      search: { ok: searchRes.ok, status: searchRes.status, total: searchJson?.paging?.total ?? searchJson?.error ?? null },
+      search: {
+        ok: searchRes.ok,
+        status: searchRes.status,
+        total: searchJson?.paging?.total ?? null,
+        error: searchJson?.error ?? null,
+        message: searchJson?.message ?? null,
+      },
     });
   } catch (err: any) {
     return reply.status(502).send({ ok: false, error: err?.message ?? String(err) });

@@ -19,6 +19,9 @@ import { generateCopy } from "../copy/copy.service.js";
 
 const ML_API = "https://api.mercadolibre.com";
 
+// ML API requires a non-bot User-Agent; bare Node.js fetch is rejected with 403
+const ML_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -29,9 +32,17 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   }
 }
 
+function mlFetchHeaders(token: string | null): Record<string, string> {
+  return {
+    "User-Agent": ML_USER_AGENT,
+    "Accept": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 async function fetchMLSellerNickname(sellerId: number, token: string | null): Promise<string | null> {
   try {
-    const res = await fetchWithTimeout(`${ML_API}/users/${sellerId}`, { headers: mlHeaders(token) }, 5000);
+    const res = await fetchWithTimeout(`${ML_API}/users/${sellerId}`, { headers: mlFetchHeaders(token) }, 5000);
     if (!res.ok) return String(sellerId);
     const data = await res.json() as any;
     return data.nickname ?? String(sellerId);
@@ -68,7 +79,7 @@ export async function productRoutes(app: FastifyInstance) {
       let searchUrl = `${ML_API}/sites/MLB/search?q=${encodeURIComponent(q)}&limit=${fetchLimit}`;
       if (category) searchUrl += `&category=${encodeURIComponent(category)}`;
 
-      const res = await fetchWithTimeout(searchUrl, { headers: mlHeaders(token) });
+      const res = await fetchWithTimeout(searchUrl, { headers: mlFetchHeaders(token) });
 
       if (!res.ok) {
         const body = await res.text().catch(() => "");
@@ -136,7 +147,7 @@ export async function productRoutes(app: FastifyInstance) {
     const token = await getMLToken();
     let itemRes: Response;
     try {
-      itemRes = await fetchWithTimeout(`${ML_API}/items/${mlItemId}`, { headers: mlHeaders(token) });
+      itemRes = await fetchWithTimeout(`${ML_API}/items/${mlItemId}`, { headers: mlFetchHeaders(token) });
     } catch (err: any) {
       return reply.status(502).send({ error: `Sem acesso à ML API: ${err?.message ?? err}` });
     }
