@@ -34,13 +34,14 @@ const MARKETPLACE_LABELS: Record<string, string> = {
 // ── ML Import Modal ──────────────────────────────────────────────────────────
 
 // Extracts the ML item ID (e.g. MLB1234567890) from a product URL or raw ID string.
+// ML URLs use MLB-XXXXXXXXXX (with hyphen); the API expects MLBXXXXXXXXXX (no hyphen).
 function extractMLItemId(input: string): string | null {
   const trimmed = input.trim();
-  // Direct ID
+  // Direct ID without hyphen: MLB5386228690
   if (/^MLB\d+$/i.test(trimmed)) return trimmed.toUpperCase();
-  // From URL: /MLB1234567890- or ?id=MLB...
-  const match = trimmed.match(/MLB\d+/i);
-  return match ? match[0].toUpperCase() : null;
+  // Extract digits after MLB or MLB-
+  const match = trimmed.match(/MLB-?(\d+)/i);
+  return match ? `MLB${match[1]}` : null;
 }
 
 function ImportMLModal({ onClose }: { onClose: () => void }) {
