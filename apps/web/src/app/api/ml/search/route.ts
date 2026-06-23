@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-// Internal Docker URL (set in EasyPanel env): http://web-way_afiliadoml:3001
-// Falls back to public URL for local dev
-const FASTIFY_URL =
-  process.env.API_INTERNAL_URL ??
+// Use the public API URL — reliable from both Next.js server and browser.
+// API_INTERNAL_URL is intentionally NOT used here because EasyPanel's internal
+// Docker hostname (web-way_afiliadoml) cannot be resolved from the Next.js container.
+const API_URL =
   process.env.NEXT_PUBLIC_API_URL ??
   "http://localhost:3001";
 
@@ -20,11 +20,13 @@ export async function GET(request: NextRequest) {
   const tid = setTimeout(() => controller.abort(), 12000);
 
   try {
-    // Call Fastify server-side via internal Docker network — avoids browser CORS and handles ML auth
     const res = await fetch(
-      `${FASTIFY_URL}/products/ml/search?${searchParams.toString()}`,
+      `${API_URL}/products/ml/search?${searchParams.toString()}`,
       {
-        headers: { authorization },
+        headers: {
+          authorization,
+          "Content-Type": "application/json",
+        },
         signal: controller.signal,
       }
     );
@@ -33,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: json?.error ?? `API retornou ${res.status}` },
+        { error: json?.error ?? `Erro ${res.status} na API` },
         { status: res.status >= 500 ? 502 : res.status }
       );
     }
@@ -42,8 +44,8 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     const message =
       err.name === "AbortError"
-        ? "Timeout ao buscar produtos"
-        : (err.message ?? "Erro ao conectar com a API");
+        ? "Timeout ao buscar produtos (>12s)"
+        : `Erro ao conectar com a API: ${err.message ?? err}`;
     return NextResponse.json({ error: message }, { status: 502 });
   } finally {
     clearTimeout(tid);
