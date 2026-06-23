@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Check, ExternalLink, Key, AlertTriangle, Eye, EyeOff, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -105,7 +105,16 @@ function SecretField({
   );
 }
 
-export default function SettingsPage() {
+// useSearchParams requires Suspense boundary in Next.js 15 App Router
+export default function SettingsPageWrapper() {
+  return (
+    <Suspense>
+      <SettingsPage />
+    </Suspense>
+  );
+}
+
+function SettingsPage() {
   const qc = useQueryClient();
   const searchParams = useSearchParams();
   const router = useRouter();
